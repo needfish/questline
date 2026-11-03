@@ -28,6 +28,7 @@ maybe turn them into separate modules first?
 - archive/moodboard
   - global or per-project? probably preferring tagging
   - support all types? links + pdfs + support wide media file types
+  - saving websites for long term should be into single html file using singlefile rowser extension.
   - annotations on items? link to notes archive?
   - just steal the mobile UI from google notes, it's good
 - notes archive
@@ -121,6 +122,8 @@ note: i like the name _questline_ quite a lot. maybe it can be the name of a cor
 
   - a goal is pretty hard to define here, because it can be very ambitious over a long time period.
 
+  - kinda hesitate to name it a "task" here. something more neutral like "line item" or "item of interest"
+
   - so a larger closed project may include many smaller projects nested inside it?
 
   - an open-ended area would have many closed projects over time. I think the vocabulary should be "open-ended projects" and "close-ended projects"
@@ -159,4 +162,10 @@ I assume we have to do some API design as well. both the web API and the speclib
 
 the current candidate is a subset of Rust, enforced by clippy, that would prioritise readability.
 minimal use of dependencies, so frameworks might be optional.
-easy-peasy-rust might be in the list here.
+considering easy-peasy-rust or standard-rs for subsetting clippy lint options.
+for longevity sake, vendoring dependencies is an option.
+server options: tiny_http/rouille over axum
+mobile application should support widgets. options for android include WebAPK or TWA
+web frontend options: requirements consists of a webpage with consistent UI and mobile.
+static html like htmx and unpoly.js comes into consideration.
+html templating engine: askama
