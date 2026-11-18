@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>questline</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <aside id="sidebar">
+    <h1>questline</h1>
+    <nav id="views"></nav>
+    <nav id="projects"></nav>
+  </aside>
+  <main>
+    <div id="board">
+      <button id="add-open" type="button">+ New</button>
+      <form id="add" hidden>
+        <input id="title" type="text" placeholder="new open project" autocomplete="off" />
+        <input id="deadline" type="date" hidden />
+        <button type="submit">Add</button>
+        <button id="add-close" type="button">✕</button>
+      </form>
+      <p id="error" hidden></p>
+      <div id="outline"></div>
+    </div>
+    <aside id="workspace" hidden></aside>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

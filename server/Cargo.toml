@@ -1,0 +1,14 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+speclib = { path = "../speclib" }
+tiny_http = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jiff = { version = "1.0", default-features = false, features = ["serde"] }
+
+[lints]
+workspace = true

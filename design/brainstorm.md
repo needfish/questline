@@ -73,7 +73,7 @@ note: i like the name _questline_ quite a lot. maybe it can be the name of a cor
 # format
 
 - self-hosted web server as core
-- user facing: web application
+- user facing: web application, so that I can access it remotely through url. has to be mobile responsive?
 - mobile application(android first, then ios. should be easier if shared backend then separated native frontend)
   - i think that mobile is only good for browsing and collecting and not quite suitable for project management. the goal is to get as low usage on mobile phones as possible.
 
@@ -145,6 +145,7 @@ personally I only have a couple of hours a day, would like to get up to context 
 
 # tech stack requirements
 
+part 1. desktop
 - as fast as possible
 - docker/apt/dnf installable
 - core should be linux/macos first (server use etc)
@@ -165,7 +166,12 @@ minimal use of dependencies, so frameworks might be optional.
 considering easy-peasy-rust or standard-rs for subsetting clippy lint options.
 for longevity sake, vendoring dependencies is an option.
 server options: tiny_http/rouille over axum
+
+part 2. mobile.
 mobile application should support widgets. options for android include WebAPK or TWA
-web frontend options: requirements consists of a webpage with consistent UI and mobile.
-static html like htmx and unpoly.js comes into consideration.
-html templating engine: askama
+
+# notes: libs can use
+datetime jiff 1.0
+
+# project refs
+https://github.com/shankar-balachandran/newdo
