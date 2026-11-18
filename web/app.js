@@ -20,12 +20,15 @@ const markdown = (source) => source.split("\n").map((raw) => {
 
 const state = {
   lines: [],
+  reasons: {},
   view: "all",
   project: null,
   selected: null,
   write: true,
   collapsed: new Set(),
 };
+
+const today = () => new Date().toISOString().slice(0, 10);
 
 async function api(path, options) {
   let res;
@@ -75,7 +78,7 @@ function rows() {
     }
   };
   walk("", 0);
-  return out.filter((row) => (!scope || scope.has(row.line.id)) && matches(row.line));
+  return out.filter((row) => row.line.status !== "Proposed" && (!scope || scope.has(row.line.id)) && matches(row.line));
 }
 
 function subtreeIds(rootId) {
@@ -93,7 +96,7 @@ const areas = () => state.lines.filter((line) => line.parent === null && line.ki
 
 function openCount(rootId) {
   const scope = subtreeIds(rootId);
-  return state.lines.filter((line) => scope.has(line.id) && line.status !== "Done").length;
+  return state.lines.filter((line) => scope.has(line.id) && line.status !== "Done" && line.status !== "Proposed").length;
 }
 
 function matches(line) {
@@ -103,12 +106,14 @@ function matches(line) {
 }
 
 function count(view) {
-  return state.lines.filter((line) => view === "all" || (view === "open") === (line.kind === "Open")).length;
+  return state.lines.filter((line) => line.status !== "Proposed" && (view === "all" || (view === "open") === (line.kind === "Open"))).length;
 }
 
 async function refresh() {
   try {
-    state.lines = await api("/items");
+    const [lines, reasons] = await Promise.all([api("/items"), api(`/reason?today=${today()}`)]);
+    state.lines = lines;
+    state.reasons = reasons;
     render();
   } catch (error) {
     showError(error.message);
@@ -123,12 +128,21 @@ function showError(text) {
 
 async function send(path, body) {
   try {
-    await api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const outcome = await api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     showError("");
+    if (outcome && typeof outcome.message === "string") showStatus(outcome.message);
     await refresh();
+    return outcome;
   } catch (error) {
     showError(error.message);
   }
+  return null;
+}
+
+function showStatus(text) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.hidden = !text;
 }
 
 const toggle = (id) => {
@@ -138,20 +152,48 @@ const toggle = (id) => {
 
 const move = (id, body) => send(`/items/${id}/move`, body);
 
-const done = (id) => send(`/items/${id}`, {});
+const done = (id) => send(`/items/${id}`, { today: today() });
+
+const confirmItem = (id) => send(`/items/${id}/confirm`, { today: today() });
+
+const skipItem = (id) => send(`/items/${id}/skip`, { today: today() });
+
+const dropItem = (id) => send(`/items/${id}/drop`, { today: today() });
 
 const retime = (id, deadline) => send(`/items/${id}/deadline`, deadline);
 
 const renote = (id, notes) => send(`/items/${id}/notes`, notes);
 
 const create = (areaId, title, deadline) =>
-  send("/items", { title, parent: areaId, open: areaId === null, deadline });
+  send("/items", { title, parent: areaId, deadline });
 
 function render() {
   renderViews();
   renderProjects();
+  renderProposals();
   renderOutline();
   renderWorkspace();
+}
+
+function renderProposals() {
+  const host = document.getElementById("proposals");
+  const proposed = state.lines.filter((line) => line.status === "Proposed");
+  host.hidden = proposed.length === 0;
+  host.replaceChildren(...proposed.map((line) => {
+    const el = document.createElement("div");
+    el.className = "proposal";
+    const label = document.createElement("span");
+    label.className = "title";
+    label.textContent = line.title + (line.kind === "Open" ? "" : ` \u00b7 due ${line.kind.Closed.deadline}`);
+    const confirmButton = document.createElement("button");
+    confirmButton.textContent = "confirm";
+    confirmButton.addEventListener("click", () => confirmItem(line.id));
+    const dropButton = document.createElement("button");
+    dropButton.textContent = "drop";
+    dropButton.addEventListener("click", () => dropItem(line.id));
+    el.append(label, confirmButton, dropButton);
+    return el;
+  }));
 }
 
 function renderWorkspace() {
@@ -270,8 +312,25 @@ function rowElement(row) {
     row.hasChildren ? toggleElement(row) : spacer(),
     doneButton(row.line),
     titleElement(row.line),
+    reasonElement(row.line),
+    skipButton(row.line),
     kindBadge(row.line),
   );
+  return el;
+}
+
+const reasonElement = (line) => {
+  const el = document.createElement("span");
+  el.className = "reason";
+  el.textContent = state.reasons[line.id] ?? "";
+  return el;
+};
+
+function skipButton(line) {
+  const el = document.createElement("button");
+  el.className = "skip";
+  el.textContent = "skip";
+  el.addEventListener("click", () => skipItem(line.id));
   return el;
 }
 
@@ -385,6 +444,16 @@ addForm.addEventListener("submit", (event) => {
   addForm.hidden = true;
   addOpen.hidden = false;
   create(state.project, title, deadlineInput.value || null);
+});
+
+const captureForm = document.getElementById("capture");
+captureForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = document.getElementById("capture-text");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  send("/capture", { text, parent: state.project, today: today() });
 });
 
 refresh();

@@ -5,7 +5,7 @@ use std::array;
 use std::slice;
 
 
-pub use item::{commitment_kind, count_direction, days_remaining, path_to_root, Commitment, Date, Direction, Item, ItemId, ProjectKind, Status, Store};
+pub use item::{commitment_kind, count_direction, days_remaining, path_to_root, Commitment, Date, Direction, Event, EventKind, Item, ItemId, ProjectKind, Status, Store};
 pub use mnemonic::{Mnemonic, MnemonicError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,7 +15,6 @@ pub enum MoveError {
     SelfParent,
     Cycle,
     DeadlineExceeded,
-    NotClosed,
 }
 
 #[derive(Clone, Copy)]
@@ -81,7 +80,6 @@ impl Store {
     }
 
     fn check_new_deadline(&self, line: &Item, id: &ItemId, deadline: Date) -> Result<(), MoveError> {
-        let ProjectKind::Closed { .. } = line.kind else { return Err(MoveError::NotClosed) };
         let late_child = self
             .descendants(id)
             .iter()
@@ -110,10 +108,77 @@ impl Store {
         found
     }
 
-    pub fn toggle(&mut self, id: &ItemId) -> Result<(), MoveError> {
+    pub fn toggle(&mut self, id: &ItemId, today: Date) -> Result<(), MoveError> {
         let line = self.0.iter_mut().find(|line| line.id == *id).ok_or(MoveError::UnknownItem)?;
         line.status = if line.status == Status::Done { Status::Active } else { Status::Done };
+        line.history.push(Event { on: today, kind: EventKind::Done, detail: String::new() });
         Ok(())
+    }
+
+    pub fn confirm(&mut self, id: &ItemId, today: Date) -> Result<(), MoveError> {
+        let line = self.0.iter_mut().find(|line| line.id == *id).ok_or(MoveError::UnknownItem)?;
+        if line.status != Status::Proposed { return Err(MoveError::UnknownItem); }
+        line.status = Status::Active;
+        line.history.push(Event { on: today, kind: EventKind::Confirmed, detail: String::new() });
+        Ok(())
+    }
+
+    pub fn drop_item(&mut self, id: &ItemId, today: Date) -> Result<(), MoveError> {
+        let line = self.0.iter_mut().find(|line| line.id == *id).ok_or(MoveError::UnknownItem)?;
+        if line.status == Status::Done { return Err(MoveError::UnknownItem); }
+        line.status = Status::Archived;
+        line.history.push(Event { on: today, kind: EventKind::Dropped, detail: String::new() });
+        Ok(())
+    }
+
+    pub fn skip(&mut self, id: &ItemId, today: Date) -> Result<(), MoveError> {
+        let line = self.0.iter_mut().find(|line| line.id == *id).ok_or(MoveError::UnknownItem)?;
+        line.history.push(Event { on: today, kind: EventKind::Skipped, detail: String::new() });
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn skip_count(&self, id: &ItemId) -> usize {
+        self.get(id).map_or(0, |line| line.history.iter().filter(|event| event.kind == EventKind::Skipped).count())
+    }
+
+    #[must_use]
+    pub fn last_touched(&self, id: &ItemId) -> Option<Date> {
+        Some(self.get(id)?.history.last()?.on)
+    }
+
+    #[must_use]
+    pub fn decayed(&self, id: &ItemId, today: Date) -> bool {
+        let Some(line) = self.get(id) else { return false };
+        if line.status != Status::Active { return false; }
+        if self.skip_count(id) >= 3 { return true; }
+        idle_days(self, id, today).is_some_and(|days| days >= 14)
+    }
+
+    #[must_use]
+    pub fn reason_text(&self, id: &ItemId, today: Date) -> String {
+        let Some(line) = self.get(id) else { return String::new() };
+        let mut parts = Vec::new();
+        if let Some(days) = days_remaining(line, today) {
+            let due = match days {
+                0 => "due today".to_owned(),
+                1.. => format!("due in {days} days"),
+                _ => format!("{} days overdue", days.unsigned_abs()),
+            };
+            parts.push(due);
+        }
+        let children = self.0.iter().filter(|child| child.parent.as_ref() == Some(id) && child.status == Status::Active).count();
+        if children > 0 {
+            parts.push(format!("{children} active"));
+        }
+        let skips = self.skip_count(id);
+        if skips >= 3 {
+            parts.push(format!("skipped {skips} times"));
+        }
+        if idle_days(self, id, today).is_some_and(|days| days >= 14) {
+            parts.push(format!("idle {} days", idle_days(self, id, today).unwrap_or_default()));
+        }
+        parts.join(" · ")
     }
 
     pub fn reorder(&mut self, id: &ItemId, step: Step) -> Result<(), MoveError> {
@@ -202,6 +267,11 @@ impl Store {
     }
 }
 
+#[must_use]
+fn idle_days(store: &Store, id: &ItemId, today: Date) -> Option<i64> {
+    store.last_touched(id).and_then(|touched| today.since(touched).ok()).map(|span| i64::from(span.get_days()))
+}
+
 impl<'store> IntoIterator for &'store Store {
     type Item = &'store Item;
     type IntoIter = slice::Iter<'store, Item>;
@@ -236,6 +306,7 @@ mod tests {
             tags: Vec::new(),
             status: Status::Active,
             notes: String::new(),
+            history: Vec::new(),
         }
     }
 
@@ -325,6 +396,53 @@ mod tests {
         let child = store.0[1].id.clone();
         store.reparent(&root, Some(child.clone())).unwrap();
         assert_eq!(store.reparent(&child, Some(root.clone())), Err(MoveError::Cycle));
+    }
+
+    #[test]
+    fn proposals_confirm_into_active() {
+        let mut store = Store::empty();
+        store.add(line("acid-amber-anchor", None, ProjectKind::Open));
+        let id = store.0[0].id.clone();
+        store.0[0].status = Status::Proposed;
+        assert_eq!(store.confirm(&id, civil::date(2031, 1, 1)), Ok(()));
+        assert_eq!(store.0[0].status, Status::Active);
+        assert_eq!(store.confirm(&id, civil::date(2031, 1, 2)), Err(MoveError::UnknownItem));
+    }
+
+    #[test]
+    fn skips_decay_after_three() {
+        let mut store = Store::empty();
+        store.add(line("acid-amber-anchor", None, ProjectKind::Open));
+        let id = store.0[0].id.clone();
+        for day in 1..3 {
+            store.skip(&id, civil::date(2031, 1, day)).unwrap();
+        }
+        assert!(!store.decayed(&id, civil::date(2031, 1, 5)));
+        store.skip(&id, civil::date(2031, 1, 6)).unwrap();
+        assert!(store.decayed(&id, civil::date(2031, 1, 6)));
+    }
+
+    #[test]
+    fn idle_items_decay_after_fourteen_days() {
+        let mut store = Store::empty();
+        store.add(line("acid-amber-anchor", None, ProjectKind::Open));
+        let id = store.0[0].id.clone();
+        store.0[0].history.push(crate::Event { on: civil::date(2031, 1, 1), kind: crate::EventKind::Captured, detail: String::new() });
+        assert!(!store.decayed(&id, civil::date(2031, 1, 14)));
+        assert!(store.decayed(&id, civil::date(2031, 1, 15)));
+    }
+
+    #[test]
+    fn reason_text_reports_deadline_and_skips() {
+        let mut store = Store::empty();
+        store.add(line("acid-amber-anchor", None, ProjectKind::Closed { deadline: civil::date(2031, 1, 10) }));
+        let id = store.0[0].id.clone();
+        assert_eq!(store.reason_text(&id, civil::date(2031, 1, 8)), "due in 2 days");
+        assert_eq!(store.reason_text(&id, civil::date(2031, 1, 12)), "2 days overdue");
+        store.skip(&id, civil::date(2031, 1, 8)).unwrap();
+        store.skip(&id, civil::date(2031, 1, 8)).unwrap();
+        store.skip(&id, civil::date(2031, 1, 8)).unwrap();
+        assert_eq!(store.reason_text(&id, civil::date(2031, 1, 8)), "due in 2 days · skipped 3 times");
     }
 
     #[test]

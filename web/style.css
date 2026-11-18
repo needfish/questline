@@ -181,3 +181,25 @@ button:hover { color: var(--fg); border-color: var(--muted); }
   #views button span.label { display: none; }
   .row .ops { display: flex; }
 }
+
+#capture { display: flex; gap: 4px; margin-bottom: 8px; }
+
+#capture input { flex: 1; }
+
+#status { color: var(--muted); }
+
+.proposal {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.proposal .title { flex: 1; cursor: default; }
+
+.reason { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.skip { padding: 0 6px; border: none; color: var(--muted); }

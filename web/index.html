@@ -15,6 +15,12 @@
   </aside>
   <main>
     <div id="board">
+      <form id="capture">
+        <input id="capture-text" type="text" placeholder="capture, ask, or correct" autocomplete="off" />
+        <button type="submit">Capture</button>
+      </form>
+      <p id="status" hidden></p>
+      <div id="proposals"></div>
       <button id="add-open" type="button">+ New</button>
       <form id="add" hidden>
         <input id="title" type="text" placeholder="new open project" autocomplete="off" />

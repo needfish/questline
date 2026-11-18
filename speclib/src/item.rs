@@ -26,9 +26,30 @@ pub struct Item {
     pub status: Status,
     #[serde(default)]
     pub notes: String,
+    #[serde(default)]
+    pub history: Vec<Event>,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EventKind {
+    Captured,
+    Inferred,
+    Confirmed,
+    Skipped,
+    Done,
+    Corrected,
+    Dropped,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Event {
+    pub on: Date,
+    pub kind: EventKind,
+    #[serde(default)]
+    pub detail: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectKind {
     Open,
     Closed { deadline: Date },
@@ -40,8 +61,9 @@ pub enum Commitment {
     Daily { last_done: Option<Date> },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
+    Proposed,
     Active,
     Done,
     Archived,

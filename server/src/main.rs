@@ -1,4 +1,5 @@
 mod api;
+mod extract;
 mod static_files;
 mod store_file;
 
